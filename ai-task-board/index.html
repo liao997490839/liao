@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>事项工作台 · 记下来，剩下的交给 AI</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --surface:#ffffff; --ink:#1f2328; --ink-2:#57606a; --ink-3:#8b949e;
+    --line:#e5e2dc; --line-soft:#efede8;
+    --accent:#2f6fed; --accent-soft:#e8f0fe;
+    --amber:#b45309; --amber-soft:#fef3e2;
+    --green:#18794e; --green-soft:#e6f4ec;
+    --violet:#6d4fc2; --violet-soft:#efeafc;
+    --gray-soft:#f0efec;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(31,35,40,.05),0 4px 16px rgba(31,35,40,.06);
+    --shadow-lg:0 8px 40px rgba(31,35,40,.16);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,textarea{font-family:inherit;font-size:inherit;color:inherit}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;gap:16px;padding:14px 24px;
+    background:var(--surface);border-bottom:1px solid var(--line);
+    position:sticky;top:0;z-index:50;
+  }
+  .brand{display:flex;align-items:baseline;gap:10px;white-space:nowrap}
+  .brand h1{font-size:16px;font-weight:700;letter-spacing:.02em}
+  .brand .date{font-size:12px;color:var(--ink-3)}
+  .capture{
+    flex:1;display:flex;gap:8px;max-width:720px;margin:0 auto;
+  }
+  .capture input{
+    flex:1;height:38px;padding:0 14px;border:1px solid var(--line);border-radius:10px;
+    background:var(--bg);outline:none;transition:.15s;
+  }
+  .capture input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+  .btn{
+    height:38px;padding:0 16px;border-radius:10px;font-size:13px;font-weight:600;
+    display:inline-flex;align-items:center;gap:6px;transition:.15s;white-space:nowrap;
+  }
+  .btn-primary{background:var(--ink);color:#fff}
+  .btn-primary:hover{background:#000}
+  .btn-accent{background:var(--accent);color:#fff}
+  .btn-accent:hover{background:#1f5cd6}
+  .btn-ghost{border:1px solid var(--line);background:#fff;color:var(--ink-2)}
+  .btn-ghost:hover{border-color:var(--ink-3);color:var(--ink)}
+  .btn-sm{height:30px;padding:0 12px;font-size:12px;border-radius:8px}
+  .scan-status{font-size:12px;color:var(--ink-3);white-space:nowrap}
+
+  /* ---------- Board ---------- */
+  .board{
+    display:flex;gap:14px;padding:18px 24px 40px;align-items:flex-start;
+    overflow-x:auto;min-height:calc(100vh - 67px);
+  }
+  .col{flex:0 0 300px;display:flex;flex-direction:column;gap:10px}
+  .col-head{
+    display:flex;align-items:center;gap:8px;padding:2px 4px 8px;
+  }
+  .col-dot{width:8px;height:8px;border-radius:50%}
+  .col-title{font-size:13px;font-weight:700}
+  .col-count{
+    font-size:11px;color:var(--ink-3);background:var(--gray-soft);
+    border-radius:99px;padding:1px 8px;font-weight:600;
+  }
+  .col-hint{font-size:11px;color:var(--ink-3);margin-left:auto}
+
+  .card{
+    background:var(--surface);border:1px solid var(--line-soft);border-radius:var(--radius);
+    padding:14px;box-shadow:var(--shadow);cursor:pointer;transition:.15s;position:relative;
+  }
+  .card:hover{transform:translateY(-1px);box-shadow:0 2px 4px rgba(31,35,40,.06),0 8px 24px rgba(31,35,40,.1);border-color:var(--line)}
+  .card-title{font-size:14px;font-weight:600;line-height:1.45;margin-bottom:4px}
+  .card-desc{
+    font-size:12px;color:var(--ink-2);display:-webkit-box;-webkit-line-clamp:2;
+    -webkit-box-orient:vertical;overflow:hidden;margin-bottom:10px;
+  }
+  .card-desc.empty{color:var(--ink-3);font-style:italic}
+  .progress{height:4px;border-radius:99px;background:var(--gray-soft);overflow:hidden;margin-bottom:8px}
+  .progress>i{display:block;height:100%;border-radius:99px;background:var(--accent);transition:width .4s ease}
+  .card-meta{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink-3)}
+  .tag{font-weight:600;padding:1px 8px;border-radius:99px}
+  .tag-blue{background:var(--accent-soft);color:var(--accent)}
+  .tag-amber{background:var(--amber-soft);color:var(--amber)}
+  .tag-green{background:var(--green-soft);color:var(--green)}
+  .tag-violet{background:var(--violet-soft);color:var(--violet)}
+  .tag-gray{background:var(--gray-soft);color:var(--ink-2)}
+  .needs-you{
+    display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--amber);
+  }
+  .needs-you::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .deliverable-chip{
+    display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--violet);
+    background:var(--violet-soft);border-radius:6px;padding:1px 7px;font-weight:600;
+  }
+  .col-empty{
+    border:1.5px dashed var(--line);border-radius:var(--radius);padding:22px 14px;
+    text-align:center;font-size:12px;color:var(--ink-3);
+  }
+  .working-badge{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--accent);font-weight:600}
+  .spinner{width:10px;height:10px;border:2px solid var(--accent-soft);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- Drawer ---------- */
+  .overlay{
+    position:fixed;inset:0;background:rgba(31,35,40,.32);opacity:0;pointer-events:none;
+    transition:.2s;z-index:90;
+  }
+  .overlay.open{opacity:1;pointer-events:auto}
+  .drawer{
+    position:fixed;top:0;right:0;bottom:0;width:min(520px,94vw);background:var(--surface);
+    box-shadow:var(--shadow-lg);transform:translateX(100%);transition:transform .25s cubic-bezier(.32,.72,0,1);
+    z-index:100;display:flex;flex-direction:column;
+  }
+  .drawer.open{transform:translateX(0)}
+  .drawer-head{
+    padding:18px 22px 14px;border-bottom:1px solid var(--line-soft);
+    display:flex;align-items:flex-start;gap:12px;
+  }
+  .drawer-head .grow{flex:1;min-width:0}
+  .drawer-title-input{
+    width:100%;font-size:17px;font-weight:700;border:none;outline:none;background:transparent;
+    padding:2px 0;border-bottom:1px dashed transparent;
+  }
+  .drawer-title-input:focus{border-bottom-color:var(--line)}
+  .drawer-sub{font-size:12px;color:var(--ink-3);margin-top:4px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .icon-btn{
+    width:32px;height:32px;border-radius:8px;display:grid;place-items:center;
+    color:var(--ink-3);font-size:16px;flex:none;
+  }
+  .icon-btn:hover{background:var(--gray-soft);color:var(--ink)}
+  .drawer-body{flex:1;overflow-y:auto;padding:18px 22px 30px}
+  .section{margin-bottom:26px}
+  .section-label{
+    font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--ink-3);
+    text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:8px;
+  }
+  .section-label .line{flex:1;height:1px;background:var(--line-soft)}
+  textarea.desc{
+    width:100%;min-height:84px;border:1px solid var(--line);border-radius:10px;
+    padding:10px 12px;font-size:13px;line-height:1.6;resize:vertical;outline:none;background:var(--bg);
+  }
+  textarea.desc:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-soft)}
+  .ai-box{
+    border:1px solid var(--accent-soft);background:linear-gradient(180deg,#f6f9ff,#fff);
+    border-radius:var(--radius);padding:14px;
+  }
+  .ai-box .who{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px}
+  .ai-box p{font-size:13px;color:var(--ink-2)}
+  .steps{display:flex;flex-direction:column;gap:0}
+  .step{display:flex;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line-soft)}
+  .step:last-child{border-bottom:none}
+  .step-ico{
+    flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+    font-size:11px;font-weight:700;margin-top:1px;
+  }
+  .step.done .step-ico{background:var(--green-soft);color:var(--green)}
+  .step.current .step-ico{background:var(--accent-soft);color:var(--accent)}
+  .step.waiting .step-ico{background:var(--amber-soft);color:var(--amber)}
+  .step.todo .step-ico{background:var(--gray-soft);color:var(--ink-3)}
+  .step-body{flex:1;min-width:0}
+  .step-name{font-size:13px;font-weight:600}
+  .step.done .step-name{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--line)}
+  .step-note{font-size:12px;color:var(--ink-2);margin-top:2px}
+  .step-state{font-size:11px;font-weight:600;margin-top:4px;display:inline-block}
+  .step.done .step-state{color:var(--green)}
+  .step.current .step-state{color:var(--accent)}
+  .step.waiting .step-state{color:var(--amber)}
+  .step.todo .step-state{color:var(--ink-3)}
+  .checkpoint-flag{
+    font-size:10px;font-weight:700;color:var(--amber);background:var(--amber-soft);
+    border-radius:5px;padding:0 6px;margin-left:6px;vertical-align:1px;
+  }
+  .confirm-bar{
+    margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--amber-soft);
+    display:flex;align-items:center;gap:10px;font-size:12px;color:var(--amber);font-weight:600;
+  }
+  .confirm-bar .btn{margin-left:auto}
+  .running-bar{
+    margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--accent-soft);
+    display:flex;align-items:center;gap:10px;font-size:12px;color:var(--accent);font-weight:600;
+  }
+  .deliv{
+    display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line-soft);
+    border-radius:10px;padding:12px;margin-bottom:8px;background:#fff;
+  }
+  .deliv-ico{
+    flex:none;width:36px;height:36px;border-radius:9px;background:var(--violet-soft);
+    display:grid;place-items:center;font-size:16px;
+  }
+  .deliv-name{font-size:13px;font-weight:600}
+  .deliv-sum{font-size:12px;color:var(--ink-2);margin-top:2px}
+  .deliv-actions{margin-left:auto;flex:none;display:flex;gap:6px}
+  .review-bar{
+    margin-top:14px;padding:14px;border-radius:10px;background:var(--violet-soft);
+    font-size:12px;color:var(--violet);font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .review-bar .spacer{flex:1}
+  .log{display:flex;flex-direction:column;gap:0}
+  .log-item{display:flex;gap:10px;font-size:12px;color:var(--ink-2);padding:5px 0}
+  .log-item time{flex:none;color:var(--ink-3);font-variant-numeric:tabular-nums;width:64px}
+  .drawer-foot{
+    padding:12px 22px;border-top:1px solid var(--line-soft);display:flex;gap:8px;align-items:center;
+    background:#fff;
+  }
+  .drawer-foot .hint{font-size:11px;color:var(--ink-3);margin-right:auto}
+
+  /* ---------- Toast ---------- */
+  .toast-wrap{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center}
+  .toast{
+    background:var(--ink);color:#fff;font-size:13px;padding:10px 18px;border-radius:99px;
+    box-shadow:var(--shadow-lg);animation:toastIn .25s ease;display:flex;gap:8px;align-items:center;
+  }
+  @keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  @media (max-width:860px){
+    .topbar{flex-wrap:wrap}
+    .capture{order:3;max-width:none;flex-basis:100%}
+    .board{flex-direction:column;overflow-x:visible}
+    .col{flex:none;width:100%}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>事项工作台</h1>
+    <span class="date" id="todayLabel"></span>
+  </div>
+  <div class="capture">
+    <input id="quickInput" type="text" placeholder="脑子里还没做完的事，先记下来……（回车快速记录）" autocomplete="off">
+    <button class="btn btn-primary" id="quickAddBtn">记下</button>
+  </div>
+  <button class="btn btn-accent" id="scanBtn">✦ 每日扫描</button>
+  <span class="scan-status" id="scanStatus"></span>
+</header>
+
+<main class="board" id="board"></main>
+
+<div class="overlay" id="overlay"></div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="grow">
+      <input class="drawer-title-input" id="dTitle" value="">
+      <div class="drawer-sub" id="dSub"></div>
+    </div>
+    <button class="icon-btn" id="drawerClose" title="关闭">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+  <div class="drawer-foot" id="drawerFoot"></div>
+</aside>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+/* =====================================================================
+ * 事项工作台 —— 单文件原型
+ * 流程：收集箱 → 待确认方向(AI扫描后给出计划) → 执行中(到检查点停下来等你确认)
+ *       → 待验收(AI产出物放在这里) → 已完成
+ * 说明：页面里所有“AI”行为目前是内置的模拟引擎（simulate AI），
+ *       每个入口都集中在 AIEngine 对象里，将来接真实模型时替换这几个函数即可。
+ * 数据保存在浏览器 localStorage。
+ * ===================================================================== */
+
+const STATUS = {
+  inbox:   { name:'收集箱',   dot:'#8b949e', hint:'随手记，待补充说明' },
+  planned: { name:'待确认方向', dot:'#b45309', hint:'AI 已给出方向，等你确认' },
+  doing:   { name:'执行中',   dot:'#2f6fed', hint:'AI 正在推进，到点会停下来' },
+  review:  { name:'待验收',   dot:'#6d4fc2', hint:'产出物在这里，等你验收' },
+  done:    { name:'已完成',   dot:'#18794e', hint:'' },
+};
+const ORDER = ['inbox','planned','doing','review','done'];
+const LS_KEY = 'ai-task-board-v1';
+
+/* ---------------- 模拟 AI 引擎（将来替换为真实模型调用） ---------------- */
+const AIEngine = {
+  // 根据事项标题+说明，给出“方向建议”和“执行步骤”
+  makePlan(task){
+    const t = (task.title + ' ' + (task.desc||''));
+    let direction, steps, deliv;
+    if (/文案|写|文章|推文|朋友圈|小红书|公众号|邮件|总结|报告/.test(t)) {
+      direction = '这是一件「内容撰写」类事项。我会先理清目标读者与核心观点，搭好大纲，再写出初稿，最后润色到可以直接使用的程度。';
+      steps = [
+        {name:'明确目标与读者', note:'根据你的说明，确认这篇内容写给谁看、要达到什么效果。'},
+        {name:'列出内容大纲', note:'给出结构框架，确定每一部分讲什么。', checkpoint:true},
+        {name:'撰写初稿', note:'按确认过的大纲完成初稿。'},
+        {name:'润色与定稿', note:'调整语气、删繁就简，输出最终版本。', checkpoint:true},
+      ];
+      deliv = { icon:'📝', name: task.title + ' · 文稿.md', sum:'可直接使用的最终文稿，含大纲与定稿两个版本。' };
+    } else if (/整理|数据|表格|统计|清单|对账|报销/.test(t)) {
+      direction = '这是一件「资料整理」类事项。我会先收集散乱信息，归类清洗，再产出一张结构清晰的表。';
+      steps = [
+        {name:'收集与归类原始信息', note:'把说明里和你后续补充的材料分类整理。'},
+        {name:'设计表格结构', note:'确定字段与分类方式，给你确认后再填数。', checkpoint:true},
+        {name:'填充并核对', note:'完成填充，标出缺失或存疑的数据。'},
+      ];
+      deliv = { icon:'📊', name: task.title + ' · 整理表.xlsx', sum:'结构化表格，附缺失项与存疑项标注。' };
+    } else if (/查|调研|研究|对比|选型|了解|分析/.test(t)) {
+      direction = '这是一件「调研分析」类事项。我会先拆解要回答的问题，逐个查证，最后给出结论和建议。';
+      steps = [
+        {name:'拆解核心问题', note:'把这件事拆成 3-5 个必须回答清楚的问题。'},
+        {name:'逐项查证', note:'围绕每个问题收集信息并交叉验证。', checkpoint:true},
+        {name:'形成结论与建议', note:'输出结论、依据和可执行的建议。'},
+      ];
+      deliv = { icon:'🔍', name: task.title + ' · 调研结论.md', sum:'问题清单 + 逐项结论 + 行动建议。' };
+    } else if (/约|联系|沟通|催|问|通知|邀请/.test(t)) {
+      direction = '这是一件「沟通推进」类事项。我会先拟好沟通要点和话术草稿，你确认后即可使用。';
+      steps = [
+        {name:'理清沟通目标', note:'明确这次沟通要拿到什么结果。'},
+        {name:'拟话术草稿', note:'准备 2 个版本：正式版与随和版。', checkpoint:true},
+        {name:'整理后续跟进点', note:'列出对方可能的回复及应对。'},
+      ];
+      deliv = { icon:'💬', name: task.title + ' · 沟通话术.md', sum:'两个版本的话术 + 跟进预案。' };
+    } else {
+      direction = '我会先把这件事拆成可执行的小步骤，逐条推进；每一步做完都会记录，关键节点停下来等你确认。';
+      steps = [
+        {name:'弄清这件事的完成标准', note:'根据你的说明，定义「做到什么程度算完成」。'},
+        {name:'拆解并排序', note:'拆成 3 步以内的小行动，排好先后顺序。', checkpoint:true},
+        {name:'逐项执行', note:'按顺序推进，遇到需要你决定的地方会停下来。'},
+        {name:'汇总结果', note:'把所有产出归拢，附上简要说明。'},
+      ];
+      deliv = { icon:'📦', name: task.title + ' · 结果汇总.md', sum:'执行过程记录 + 最终产出汇总。' };
+    }
+    return { direction, steps: steps.map(s=>({...s, state:'todo'})), deliverable: deliv };
+  },
+  // 执行某一步时的“工作说明”
+  workNote(step){
+    const notes = [
+      '已完成：' + step.name + '。结果已归入产出物草稿。',
+      '已完成：' + step.name + '，未发现需要你额外决定的地方。',
+      '已完成：' + step.name + '。有一处小判断我按常规处理了，验收时可以看到标注。',
+    ];
+    return notes[Math.floor(Math.random()*notes.length)];
+  }
+};
+
+/* ---------------- 数据层 ---------------- */
+let tasks = [];
+let activeId = null;
+let runner = null; // 执行计时器
+
+function load(){
+  try { tasks = JSON.parse(localStorage.getItem(LS_KEY)) || []; }
+  catch(e){ tasks = []; }
+  if (!tasks.length) seed();
+}
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function nowStr(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function dayStr(ts){
+  const d = new Date(ts);
+  return (d.getMonth()+1) + '月' + d.getDate() + '日';
+}
+function log(task, text){ task.logs.unshift({ t: nowStr(), text }); }
+
+function seed(){
+  const demo = [
+    { title:'给妈妈打个电话，问问体检结果', desc:'上周妈妈去做了年度体检，报告应该出来了。问问指标怎么样，需不需要复查。', status:'inbox' },
+    { title:'写下周团队例会的会议纪要模板', desc:'每周一例会要用，包含：上周进展、本周计划、阻塞问题三块。风格简洁，能直接发群里。', status:'planned' },
+    { title:'整理 10 月的报销发票', desc:'抽屉里一摞发票，打车和餐饮为主，要按公司格式整理成表，月底前提交。', status:'doing' },
+    { title:'调研三款笔记软件哪个适合迁移', desc:'现在用的太卡了，对比 Notion、Obsidian、飞书文档，重点看迁移成本和搜索速度。', status:'review' },
+    { title:'定下周五聚餐的餐厅', desc:'6 个人，有人不吃辣，预算人均 150 以内。', status:'done' },
+  ];
+  tasks = demo.map(d => {
+    const task = {
+      id: uid(), title: d.title, desc: d.desc, status: d.status,
+      createdAt: Date.now() - Math.floor(Math.random()*3)*86400000,
+      updatedAt: Date.now(), steps: [], direction: '', deliverable: null, logs: [],
+    };
+    if (d.status !== 'inbox') {
+      const plan = AIEngine.makePlan(task);
+      task.direction = plan.direction; task.steps = plan.steps;
+      log(task, 'AI 扫描后给出了方向与步骤。');
+    }
+    if (d.status === 'doing') {
+      task.steps[0].state = 'done';
+      task.steps[1].state = 'waiting';
+      log(task, 'AI 完成了「' + task.steps[0].name + '」。');
+      log(task, '到达检查点，等你确认后继续。');
+    }
+    if (d.status === 'review') {
+      task.steps.forEach(s => s.state = 'done');
+      task.deliverable = AIEngine.makePlan(task).deliverable;
+      log(task, '全部步骤完成，产出物已放入待验收。');
+    }
+    if (d.status === 'done') {
+      task.steps.forEach(s => s.state = 'done');
+      task.deliverable = AIEngine.makePlan(task).deliverable;
+      log(task, '你已验收通过，事项完成。');
+    }
+    return task;
+  });
+  save();
+}
+
+/* ---------------- 看板渲染 ---------------- */
+const boardEl = document.getElementById('board');
+
+function taskProgress(t){
+  if (t.status === 'done') return 100;
+  if (!t.steps.length) return 0;
+  const done = t.steps.filter(s => s.state === 'done').length;
+  return Math.round(done / t.steps.length * 100);
+}
+function waitingStep(t){ return t.steps.find(s => s.state === 'waiting'); }
+function runningStep(t){ return t.steps.find(s => s.state === 'current'); }
+
+function cardHTML(t){
+  const p = taskProgress(t);
+  let meta = '';
+  const ws = waitingStep(t);
+  if (t.status === 'inbox') {
+    meta = `<span class="tag tag-gray">待补充说明</span>`;
+  } else if (t.status === 'planned') {
+    meta = `<span class="needs-you">方向待你确认</span>`;
+  } else if (t.status === 'doing' && ws) {
+    meta = `<span class="needs-you">第 ${t.steps.indexOf(ws)+1} 步待你确认</span>`;
+  } else if (t.status === 'doing') {
+    meta = `<span class="working-badge"><span class="spinner"></span>AI 推进中</span>`;
+  } else if (t.status === 'review') {
+    meta = `<span class="needs-you">待你验收</span>`;
+  } else {
+    meta = `<span class="tag tag-green">已完成</span>`;
+  }
+  const stepInfo = t.steps.length ? `<span>${t.steps.filter(s=>s.state==='done').length}/${t.steps.length} 步</span>` : '';
+  const deliv = t.deliverable ? `<span class="deliverable-chip">${t.deliverable.icon} 产出物</span>` : '';
+  return `
+  <div class="card" data-id="${t.id}">
+    <div class="card-title">${escapeHTML(t.title)}</div>
+    <div class="card-desc ${t.desc?'':'empty'}">${t.desc ? escapeHTML(t.desc) : '还没写说明，点开补一句，AI 才知道怎么做。'}</div>
+    <div class="progress"><i style="width:${p}%"></i></div>
+    <div class="card-meta">${meta}${stepInfo}${deliv}<span style="margin-left:auto">${dayStr(t.updatedAt)}</span></div>
+  </div>`;
+}
+
+function render(){
+  boardEl.innerHTML = ORDER.map(key => {
+    const list = tasks.filter(t => t.status === key);
+    const s = STATUS[key];
+    const cards = list.length ? list.map(cardHTML).join('')
+      : `<div class="col-empty">${key==='inbox' ? '还没记录新事项' : '暂无'}</div>`;
+    return `
+    <section class="col">
+      <div class="col-head">
+        <span class="col-dot" style="background:${s.dot}"></span>
+        <span class="col-title">${s.name}</span>
+        <span class="col-count">${list.length}</span>
+        <span class="col-hint">${s.hint}</span>
+      </div>
+      ${cards}
+    </section>`;
+  }).join('');
+  boardEl.querySelectorAll('.card').forEach(c => c.addEventListener('click', () => openDrawer(c.dataset.id)));
+  updateScanStatus();
+}
+
+function updateScanStatus(){
+  const el = document.getElementById('scanStatus');
+  const waiting = tasks.filter(t =>
+    (t.status==='inbox' && t.desc) || t.status==='planned' || waitingStep(t) || t.status==='review'
+  ).length;
+  el.textContent = waiting ? `${waiting} 件事需要你` : '';
+}
+
+/* ---------------- 抽屉（详情） ---------------- */
+const overlay = document.getElementById('overlay');
+const drawer = document.getElementById('drawer');
+const dTitle = document.getElementById('dTitle');
+const dSub = document.getElementById('dSub');
+const dBody = document.getElementById('drawerBody');
+const dFoot = document.getElementById('drawerFoot');
+
+function openDrawer(id){
+  activeId = id;
+  overlay.classList.add('open');
+  drawer.classList.add('open');
+  renderDrawer();
+}
+function closeDrawer(){
+  activeId = null;
+  overlay.classList.remove('open');
+  drawer.classList.remove('open');
+}
+overlay.addEventListener('click', closeDrawer);
+document.getElementById('drawerClose').addEventListener('click', closeDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+function stepStateLabel(s){
+  return { done:'已完成', current:'AI 正在做…', waiting:'到检查点了 · 等你确认', todo:'未开始' }[s.state];
+}
+
+function renderDrawer(){
+  const t = tasks.find(x => x.id === activeId);
+  if (!t) return;
+  dTitle.value = t.title;
+  dSub.innerHTML = `
+    <span class="tag tag-${ {inbox:'gray',planned:'amber',doing:'blue',review:'violet',done:'green'}[t.status] }">${STATUS[t.status].name}</span>
+    <span>记录于 ${dayStr(t.createdAt)}</span>
+    <span>进度 ${taskProgress(t)}%</span>`;
+
+  let html = '';
+
+  // 说明
+  html += `
+  <div class="section">
+    <div class="section-label">事情说明<span class="line"></span></div>
+    <textarea class="desc" id="dDesc" placeholder="补充一句：这件事要做到什么程度？有什么限制？AI 会按这个来执行。">${escapeHTML(t.desc||'')}</textarea>
+  </div>`;
+
+  // AI 方向
+  if (t.direction) {
+    html += `
+    <div class="section">
+      <div class="section-label">AI 建议方向<span class="line"></span></div>
+      <div class="ai-box">
+        <div class="who">✦ AI</div>
+        <p>${escapeHTML(t.direction)}</p>
+      </div>
+    </div>`;
+  }
+
+  // 步骤
+  if (t.steps.length) {
+    html += `
+    <div class="section">
+      <div class="section-label">执行步骤<span class="line"></span></div>
+      <div class="steps">
+        ${t.steps.map((s,i) => `
+        <div class="step ${s.state}">
+          <div class="step-ico">${s.state==='done' ? '✓' : i+1}</div>
+          <div class="step-body">
+            <div class="step-name">${escapeHTML(s.name)}${s.checkpoint ? '<span class="checkpoint-flag">检查点</span>' : ''}</div>
+            <div class="step-note">${escapeHTML(s.note)}</div>
+            <span class="step-state">${stepStateLabel(s)}</span>
+          </div>
+        </div>`).join('')}
+      </div>`;
+
+    const ws = waitingStep(t);
+    if (t.status === 'doing' && ws) {
+      html += `
+      <div class="confirm-bar">
+        <span>AI 已完成前面的步骤，做到「${escapeHTML(ws.name)}」前停住了——确认后继续。</span>
+        <button class="btn btn-accent btn-sm" data-act="confirm-step">确认，继续</button>
+      </div>`;
+    } else if (t.status === 'doing' && runningStep(t)) {
+      html += `
+      <div class="running-bar"><span class="spinner"></span>AI 正在执行「${escapeHTML(runningStep(t).name)}」…</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // 产出物
+  if (t.deliverable) {
+    html += `
+    <div class="section">
+      <div class="section-label">AI 产出物 · 验收区<span class="line"></span></div>
+      <div class="deliv">
+        <div class="deliv-ico">${t.deliverable.icon}</div>
+        <div>
+          <div class="deliv-name">${escapeHTML(t.deliverable.name)}</div>
+          <div class="deliv-sum">${escapeHTML(t.deliverable.sum)}</div>
+        </div>
+        <div class="deliv-actions">
+          <button class="btn btn-ghost btn-sm" data-act="preview">预览</button>
+          <button class="btn btn-ghost btn-sm" data-act="download">下载</button>
+        </div>
+      </div>`;
+    if (t.status === 'review') {
+      html += `
+      <div class="review-bar">
+        <span>这是 AI 做完的东西，满意就验收，不满意退回让它重做。</span>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost btn-sm" data-act="reject">退回重做</button>
+        <button class="btn btn-accent btn-sm" data-act="accept">验收通过</button>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // 动态记录
+  html += `
+  <div class="section">
+    <div class="section-label">进展记录<span class="line"></span></div>
+    <div class="log">
+      ${t.logs.length ? t.logs.map(l => `<div class="log-item"><time>${l.t}</time><span>${escapeHTML(l.text)}</span></div>`).join('') : '<div class="log-item"><span style="color:var(--ink-3)">还没有动态</span></div>'}
+    </div>
+  </div>`;
+
+  dBody.innerHTML = html;
+
+  // 底部操作
+  let foot = '<span class="hint">改动会自动保存</span>';
+  if (t.status === 'inbox') {
+    foot += `<button class="btn btn-ghost btn-sm" data-act="delete">删除</button>
+             <button class="btn btn-accent btn-sm" data-act="to-plan">交给 AI 出方案</button>`;
+  } else if (t.status === 'planned') {
+    foot += `<button class="btn btn-ghost btn-sm" data-act="replan">让 AI 重新出方案</button>
+             <button class="btn btn-accent btn-sm" data-act="confirm-plan">方向没问题，开始做</button>`;
+  } else if (t.status === 'doing') {
+    foot += `<button class="btn btn-ghost btn-sm" data-act="pause">暂停</button>`;
+  } else if (t.status === 'done') {
+    foot += `<button class="btn btn-ghost btn-sm" data-act="archive">归档</button>`;
+  }
+  dFoot.innerHTML = foot;
+}
+
+// 抽屉内按钮统一代理
+dBody.addEventListener('click', onDrawerAction);
+dFoot.addEventListener('click', onDrawerAction);
+dTitle.addEventListener('change', () => {
+  const t = tasks.find(x => x.id === activeId); if (!t) return;
+  t.title = dTitle.value.trim() || t.title; touch(t); save(); render(); renderDrawer();
+});
+dBody.addEventListener('change', e => {
+  if (e.target.id === 'dDesc') {
+    const t = tasks.find(x => x.id === activeId); if (!t) return;
+    t.desc = e.target.value.trim(); touch(t);
+    log(t, '你补充了事情说明。');
+    save(); render(); renderDrawer();
+  }
+});
+
+function onDrawerAction(e){
+  const btn = e.target.closest('[data-act]'); if (!btn) return;
+  const t = tasks.find(x => x.id === activeId); if (!t) return;
+  const act = btn.dataset.act;
+  if (act === 'to-plan') planTask(t, true);
+  else if (act === 'confirm-plan') startDoing(t);
+  else if (act === 'replan') { planTask(t, true); toast('AI 重新给出了方案'); }
+  else if (act === 'confirm-step') confirmStep(t);
+  else if (act === 'accept') acceptTask(t);
+  else if (act === 'reject') rejectTask(t);
+  else if (act === 'pause') { stopRunner(); toast('已暂停，点「每日扫描」或重新打开可继续'); }
+  else if (act === 'delete') { tasks = tasks.filter(x => x.id !== t.id); save(); closeDrawer(); render(); }
+  else if (act === 'archive') { tasks = tasks.filter(x => x.id !== t.id); save(); closeDrawer(); render(); toast('已归档'); }
+  else if (act === 'preview') toast('原型中暂以摘要代替预览');
+  else if (act === 'download') downloadDeliverable(t);
+}
+
+/* ---------------- 流程动作 ---------------- */
+function touch(t){ t.updatedAt = Date.now(); }
+
+function addTask(title){
+  const t = {
+    id: uid(), title, desc: '', status: 'inbox',
+    createdAt: Date.now(), updatedAt: Date.now(),
+    steps: [], direction: '', deliverable: null, logs: [],
+  };
+  log(t, '你记下了这件事。');
+  tasks.unshift(t); save(); render();
+  toast('已记到收集箱，记得补一句说明');
+}
+
+function planTask(t, manual){
+  if (!t.desc && manual) { toast('先补一句「事情说明」，AI 才知道怎么做'); return; }
+  const plan = AIEngine.makePlan(t);
+  t.direction = plan.direction;
+  t.steps = plan.steps;
+  t.pendingDeliverable = plan.deliverable;
+  t.status = 'planned';
+  touch(t);
+  log(t, 'AI 扫描了说明，给出方向与 ' + t.steps.length + ' 个步骤，等你确认。');
+  save(); render(); if (activeId === t.id) renderDrawer();
+}
+
+function startDoing(t){
+  t.status = 'doing';
+  log(t, '你确认了方向，AI 开始执行。');
+  touch(t); save();
+  runNext(t);
+}
+
+function confirmStep(t){
+  const ws = waitingStep(t);
+  if (!ws) return;
+  log(t, '你确认了「' + ws.name + '」，AI 继续。');
+  touch(t); save();
+  runNext(t);
+}
+
+function runNext(t){
+  stopRunner();
+  // 找到下一个待执行步骤：先把 waiting 的视作已确认通过
+  const ws = waitingStep(t);
+  if (ws) ws.state = 'done';
+  const next = t.steps.find(s => s.state === 'todo');
+  if (!next) { finishTask(t); return; }
+  next.state = 'current';
+  save(); render(); if (activeId === t.id) renderDrawer();
+
+  runner = setTimeout(() => {
+    next.state = 'done';
+    log(t, AIEngine.workNote(next));
+    const after = t.steps.find(s => s.state === 'todo');
+    if (!after) { finishTask(t); return; }
+    if (after.checkpoint) {
+      after.state = 'waiting';
+      log(t, '到达检查点「' + after.name + '」，等你确认后继续。');
+      touch(t); save(); render(); if (activeId === t.id) renderDrawer();
+      toast('「' + t.title + '」到检查点了，等你确认');
+    } else {
+      touch(t); save();
+      runNext(t);
+    }
+  }, 1600 + Math.random()*1200);
+}
+
+function finishTask(t){
+  t.deliverable = t.pendingDeliverable || AIEngine.makePlan(t).deliverable;
+  t.status = 'review';
+  touch(t);
+  log(t, '全部步骤完成，产出物已放入验收区。');
+  save(); render(); if (activeId === t.id) renderDrawer();
+  toast('「' + t.title + '」做完了，去看看产出物');
+}
+
+function acceptTask(t){
+  t.status = 'done'; touch(t);
+  log(t, '你验收通过，这件事完成。');
+  save(); render(); renderDrawer();
+}
+function rejectTask(t){
+  t.status = 'doing';
+  const last = t.steps[t.steps.length-1];
+  if (last) last.state = 'todo';
+  log(t, '你退回了产出物，AI 将重做最后一步。');
+  touch(t); save();
+  runNext(t);
+}
+
+function stopRunner(){ if (runner) { clearTimeout(runner); runner = null; } }
+
+function downloadDeliverable(t){
+  if (!t.deliverable) return;
+  const content = '# ' + t.deliverable.name + '\n\n'
+    + '> 本文件由「事项工作台」原型生成的示意产出物。\n\n'
+    + '## 事项\n' + t.title + '\n\n## 说明\n' + (t.desc || '（无）') + '\n\n'
+    + '## AI 执行方向\n' + t.direction + '\n\n'
+    + '## 步骤完成情况\n' + t.steps.map((s,i)=>`${i+1}. [x] ${s.name} — ${s.note}`).join('\n') + '\n\n'
+    + '## 产出说明\n' + t.deliverable.sum + '\n';
+  const blob = new Blob([content], {type:'text/markdown;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = t.deliverable.name;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ---------------- 每日扫描 ---------------- */
+document.getElementById('scanBtn').addEventListener('click', () => {
+  const candidates = tasks.filter(t => t.status === 'inbox' && t.desc);
+  const empty = tasks.filter(t => t.status === 'inbox' && !t.desc);
+  if (!candidates.length) {
+    toast(empty.length ? `有 ${empty.length} 件事还缺说明，点开补一句 AI 才能接手` : '收集箱是空的，先记几件事吧');
+    return;
+  }
+  let i = 0;
+  toast(`AI 开始扫描 ${candidates.length} 件事…`);
+  const tick = () => {
+    if (i >= candidates.length) return;
+    planTask(candidates[i], false);
+    i++;
+    setTimeout(tick, 700);
+  };
+  tick();
+  // 同时推进所有“执行中且不在等待确认”的任务
+  tasks.filter(t => t.status === 'doing' && !waitingStep(t) && !runningStep(t)).forEach(runNext);
+});
+
+/* ---------------- 快速记录 ---------------- */
+const quickInput = document.getElementById('quickInput');
+function quickAdd(){
+  const v = quickInput.value.trim();
+  if (!v) return;
+  quickInput.value = '';
+  addTask(v);
+}
+document.getElementById('quickAddBtn').addEventListener('click', quickAdd);
+quickInput.addEventListener('keydown', e => { if (e.key === 'Enter') quickAdd(); });
+
+/* ---------------- 工具 ---------------- */
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function toast(msg){
+  const wrap = document.getElementById('toastWrap');
+  const el = document.createElement('div');
+  el.className = 'toast'; el.textContent = msg;
+  wrap.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = '.3s'; }, 2600);
+  setTimeout(() => el.remove(), 3000);
+}
+
+/* ---------------- 启动 ---------------- */
+document.getElementById('todayLabel').textContent =
+  new Date().toLocaleDateString('zh-CN', { month:'long', day:'numeric', weekday:'long' });
+load();
+render();
+// 首次打开时，让“执行中且不需要确认”的种子任务跑起来
+tasks.filter(t => t.status === 'doing' && !waitingStep(t)).forEach(runNext);
+</script>
+</body>
+</html>
